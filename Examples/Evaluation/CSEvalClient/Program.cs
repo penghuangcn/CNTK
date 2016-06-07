@@ -8,6 +8,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
@@ -43,6 +44,13 @@ namespace Microsoft.MSR.CNTK.Extensibility.Managed.CSEvalClient
     /// This case requires the 02_Convolution model and the Test-28x28.txt test file which are part of the <CNTK>/Examples/Image/MNIST example.
     /// Refer to <see cref="https://github.com/Microsoft/CNTK/blob/master/Examples/Image/MNIST/README.md"/> for how to train
     /// the model used in this example.
+    /// 
+    /// EvaluateModelImageInput
+    /// -----------------------
+    /// This case requires the ResNet_34 trained model which is part of the <CNTK>/Examples/Image/Miscellanous/ImageNet/ResNet</CNTK> example.
+    /// This case shows how to evaluate a model that was trained with the ImageReader.
+    /// The input for evaluation needs to be transformed in a similar manner as the ImageReader did for training.
+    /// 
     /// </description>
     class Program
     {
@@ -73,6 +81,9 @@ namespace Microsoft.MSR.CNTK.Extensibility.Managed.CSEvalClient
 
             Console.WriteLine("\n====== EvaluateMultipleModels ========");
             EvaluateMultipleModels();
+
+            Console.WriteLine("\n====== EvaluateModelWithImageInput ========");
+            EvaluateModelImageInput();
 
             Console.WriteLine("Press <Enter> to terminate.");
             Console.ReadLine();
@@ -399,6 +410,74 @@ namespace Microsoft.MSR.CNTK.Extensibility.Managed.CSEvalClient
         }
 
         /// <summary>
+        /// Evaluates a trained model with an image as input and obtains a single layer output
+        /// </summary>
+        /// <remarks>
+        /// This example requires the ResNet_34 trained model
+        /// </remarks>
+        private static void EvaluateModelImageInput()
+        {
+            try
+            {
+                var testBitmap = new Bitmap(Bitmap.FromFile(@"E:\TestPattern2.bmp")).Resize(15, 15, true);
+                int iter = 1;
+
+                Stopwatch sw = new Stopwatch();
+                List<float> list1 = new List<float>();
+                List<float> list2 = new List<float>();
+                List<float> list3 = new List<float>();
+                List<float> list4 = new List<float>();
+                
+                sw.Start();
+                for (int i = 0; i < iter; i++)
+                {
+                    list1 = testBitmap.ExtractHWC();
+                }
+                sw.Stop();
+                Console.WriteLine("ExtractHWC = {0} ms/call", sw.ElapsedMilliseconds / iter);
+                
+                sw.Reset();
+                sw.Start();
+                for (int i = 0; i < iter; i++)
+                {
+                    list2 = testBitmap.ParallelExtractHWC();
+                }
+                sw.Stop();
+                Console.WriteLine("ParallelExtractHWC = {0} ms/call", sw.ElapsedMilliseconds / iter);
+                
+                sw.Reset();
+                sw.Start();
+                for (int i = 0; i < iter; i++)
+                {
+                    list3 = testBitmap.ExtractCHW();
+                }
+                sw.Stop();
+                Console.WriteLine("ExtractCHW = {0} ms/call", sw.ElapsedMilliseconds / iter);
+                
+                sw.Reset();
+                sw.Start();
+                for (int i = 0; i < iter; i++)
+                {
+                    list4 = testBitmap.ParallelExtractCHW();
+                }
+                sw.Stop();
+                Console.WriteLine("ParallelExtractCHW = {0} ms/call", sw.ElapsedMilliseconds / iter);
+
+                OutputListComparison("\nComparing HWC to Parallel HWC", list1, list2);
+
+                OutputListComparison("\nComparing CHW to Parallel CHW", list3, list4);
+            }
+            catch (CNTKException ex)
+            {
+                Console.WriteLine("Error: {0}\nNative CallStack: {1}\n Inner Exception: {2}", ex.Message, ex.NativeCallStack, ex.InnerException != null ? ex.InnerException.Message : "No Inner Exception");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error: {0}\nCallStack: {1}\n Inner Exception: {2}", ex.Message, ex.StackTrace, ex.InnerException != null ? ex.InnerException.Message : "No Inner Exception");
+            }
+        }
+
+        /// <summary>
         /// Dumps the output to the console
         /// </summary>
         /// <param name="outputs">The structure containing the output layers</param>
@@ -465,6 +544,44 @@ namespace Microsoft.MSR.CNTK.Extensibility.Managed.CSEvalClient
             }
 
             return list;
+        }
+
+        static void OutputList(string caption, List<float> list)
+        {
+            Console.WriteLine(caption);
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (i % 15 == 0 && i > 0)
+                    Console.WriteLine();
+
+                Console.Write("{0,3}  ", list[i]);
+            }
+            Console.WriteLine("\n");
+        }
+
+        static void OutputListComparison(string caption, List<float> listA, List<float> listB)
+        {
+            bool different = false;
+            Console.WriteLine(caption);
+
+            if (listA.Count != listB.Count)
+                Console.WriteLine("List sizes don't match: A={0}, B={1}", listA.Count, listB.Count);
+
+            for (int i = 0; i < listA.Count; i++)
+            {
+                if (i % 10 == 0 && different)
+                    Console.WriteLine();
+
+                if ((int) listA[i] != (int) listB[i])
+                {
+                    different = true;
+                    Console.Write("{0,3}/{1,3}  ", listA[i], listB[i]);
+                }
+            }
+
+            if (!different)
+                Console.WriteLine("Lists are equal.");
         }
     }
 }
