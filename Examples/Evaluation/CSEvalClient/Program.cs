@@ -63,7 +63,7 @@ namespace Microsoft.MSR.CNTK.Extensibility.Managed.CSEvalClient
         private static void Main(string[] args)
         {
             initialDirectory = Environment.CurrentDirectory;
-
+            /*
             Console.WriteLine("====== EvaluateModelSingleLayer ========");
             EvaluateModelSingleLayer();
 
@@ -84,6 +84,9 @@ namespace Microsoft.MSR.CNTK.Extensibility.Managed.CSEvalClient
 
             Console.WriteLine("\n====== EvaluateModelWithImageInput ========");
             EvaluateModelImageInput();
+            */
+            Console.WriteLine("\n====== EvaluateModelImageInput ========");
+            EvaluateImageClassificationModel();
 
             Console.WriteLine("Press <Enter> to terminate.");
             Console.ReadLine();
@@ -466,6 +469,62 @@ namespace Microsoft.MSR.CNTK.Extensibility.Managed.CSEvalClient
                 OutputListComparison("\nComparing HWC to Parallel HWC", list1, list2);
 
                 OutputListComparison("\nComparing CHW to Parallel CHW", list3, list4);
+            }
+            catch (CNTKException ex)
+            {
+                Console.WriteLine("Error: {0}\nNative CallStack: {1}\n Inner Exception: {2}", ex.Message, ex.NativeCallStack, ex.InnerException != null ? ex.InnerException.Message : "No Inner Exception");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error: {0}\nCallStack: {1}\n Inner Exception: {2}", ex.Message, ex.StackTrace, ex.InnerException != null ? ex.InnerException.Message : "No Inner Exception");
+            }
+        }
+
+        /// <summary>
+        /// This method shows how to evaluate a trained image classification model
+        /// </summary>
+        public static void EvaluateImageClassificationModel()
+        {
+            try
+            {
+                // The examples assume the executable is running from the data folder
+                // We switch the current directory to the data folder (assuming the executable is in the <CNTK>/x64/Debug|Release folder
+                string workingDirectory = Path.Combine(initialDirectory, @"..\..\Examples\Image\Miscellaneous\ImageNet\ResNet");
+                Environment.CurrentDirectory = initialDirectory;
+
+                List<float> outputs;
+                string outputLayerName;
+
+                using (var model = new IEvaluateModelManagedF())
+                {
+                    string modelFilePath = @"\\GAIZKA-DESKTOP\CNTK\Models\ResNet_18.model";
+                    model.CreateNetwork(string.Format("modelPath=\"{0}\"", modelFilePath), deviceId: -1);
+
+                    // Prepare input value in the appropriate structure and size
+                    var inDims = model.GetNodeDimensions(NodeGroup.Input);
+                    //var inputs = GetDictionary(inDims.First().Key, inDims.First().Value, 1);
+
+                    // Transform the image
+                    string imageFileName = @"E:\Zebra04.jpg";
+                    Bitmap bmp = new Bitmap(Bitmap.FromFile(imageFileName));
+                    var resized = bmp.Resize(224, 224, true);
+                    var resizedCHW = bmp.ParallelExtractCHW();
+                    var inputs = new Dictionary<string, List<float>>() { {inDims.First().Key, resizedCHW } };
+
+                    // We can call the evaluate method and get back the results (single layer output)...
+                    var outDims = model.GetNodeDimensions(NodeGroup.Output);
+                    outputLayerName = outDims.First().Key;
+                    outputs = model.Evaluate(inputs, outputLayerName);
+                }
+
+                // Retrieve the outcome index (so we can compare it with the expected index)
+                int index = 0;
+                var max = outputs.Select(v => new { Value = v, Index = index++ })
+                    .Aggregate((a, b) => (a.Value > b.Value) ? a : b)
+                    .Index;
+
+                //OutputResults(outputLayerName, outputs);
+                Console.WriteLine("Outcome: {0}", max);
             }
             catch (CNTKException ex)
             {
